@@ -48,7 +48,7 @@ export const UIManager = {
     renderSettings() {
         const gameName = Engine.getCurrentGameName();
         document.getElementById('menu-title').innerText = gameName;
-        const diffLabel = (gameName === 'PONG') ? "SPEED" : "GRAVITY";
+        const diffLabel = "SPEED";
 
         const html = `
             <div class="setting-label">TIME</div>

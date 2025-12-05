@@ -38,9 +38,9 @@ export const InputSys = {
             this.hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}` });
             this.hands.setOptions({
                 maxNumHands: 2,
-                modelComplexity: 0,
-                minDetectionConfidence: 0.5,
-                minTrackingConfidence: 0.5,
+                modelComplexity: 0, // Lite Mode (Fastest response, significantly less latency)
+                minDetectionConfidence: 0.4, // Balanced threshold
+                minTrackingConfidence: 0.4,
                 selfieMode: true
             });
             this.hands.onResults(this.onResults.bind(this));
@@ -143,11 +143,14 @@ export const InputSys = {
                 const cy = wrist.y * 0.4 + mid.y * 0.6;
 
                 // Interactive Box Mapping
-                // Symmetrical Offset: Shift both hands "Inwards" towards center
-                // Left Hand needs + (Right), Right Hand needs - (Left)
-                const sideOffset = (cx < 0.5) ? 0.015 : -0.015;
+                // Continuous Offset: Linearly interpolate to avoid jump at center
+                // 0.25 (Left) -> +0.015
+                // 0.50 (Mid)  -> 0.000
+                // 0.75 (Right)-> -0.015
+                // Formula: -0.06 * (cx - 0.5)
+                const sideOffset = -0.06 * (cx - 0.5);
 
-                // X: Gentle expansion + Symmetrical Offset
+                // X: Gentle expansion + Continuous Offset
                 let mx = (cx - 0.02) / 0.96 + sideOffset;
                 // Y: 0.1 margin (helps reach top/bottom bars)
                 let my = (cy - 0.1) / 0.8;
@@ -164,11 +167,23 @@ export const InputSys = {
             }
         }
 
+        // 1.5. De-duplicate Hands (Fix for "Two cursors on one hand")
+        // If MediaPipe detects the same hand twice (ghosting), merge them.
+        for (let i = 0; i < newHands.length; i++) {
+            for (let j = i + 1; j < newHands.length; j++) {
+                const dist = Math.hypot(newHands[i].x - newHands[j].x, newHands[i].y - newHands[j].y);
+                if (dist < 0.1) {
+                    newHands.splice(j, 1);
+                    j--; // Adjust index
+                }
+            }
+        }
+
         // 2. Session Tracking (The "Sticky" Logic)
 
         // A. Match existing sessions to closest new hands
         for (let session of this.sessions) {
-            let bestDist = 0.3; // Max jump distance (approx 30% screen width per frame)
+            let bestDist = 0.35; // Strict limit to prevent cross-screen cursor stealing
             let bestMatch = null;
 
             for (let hand of newHands) {
@@ -181,9 +196,22 @@ export const InputSys = {
             }
 
             if (bestMatch) {
-                // Update Session
-                session.x = bestMatch.x;
-                session.y = bestMatch.y;
+                // Update Session with LERP for smoothness
+                // Fixes "Teleporting" look and reduces jitter-swaps
+                const smoothing = 0.6; // 0.6 = Fast but smooth. 1.0 = Instant snap.
+
+                const dist = Math.hypot(bestMatch.x - session.x, bestMatch.y - session.y);
+
+                if (session.missingFrames > 0 || dist > 0.5) {
+                    // Snap instantly if just Found or moved HUGE distance (re-entry)
+                    session.x = bestMatch.x;
+                    session.y = bestMatch.y;
+                } else {
+                    // Smooth movement
+                    session.x = session.x + (bestMatch.x - session.x) * smoothing;
+                    session.y = session.y + (bestMatch.y - session.y) * smoothing;
+                }
+
                 session.fist = bestMatch.fist;
                 session.missingFrames = 0;
                 bestMatch.claimed = true;

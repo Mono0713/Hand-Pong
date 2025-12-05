@@ -2,6 +2,7 @@ import { UIManager } from './UIManager.js';
 import { InputSys } from './InputManager.js';
 import { PongGame } from '../games/PongGame.js';
 import { VolleyGame } from '../games/VolleyGame.js';
+import { HockeyGame } from '../games/HockeyGame.js';
 
 export const Engine = {
     canvas: document.getElementById('gameCanvas'),
@@ -17,8 +18,8 @@ export const Engine = {
 
     // State
     running: false,
-    games: [PongGame, VolleyGame],
-    gameNames: ['PONG', 'VOLLEY'],
+    games: [PongGame, VolleyGame, HockeyGame],
+    gameNames: ['PONG', 'VOLLEY', 'HOCKEY'],
     gameIndex: 0,
     currGame: null,
 
@@ -37,7 +38,15 @@ export const Engine = {
         this.resize();
         window.addEventListener('resize', () => this.resize());
         this.canvas.width = 1280;
+        this.canvas.width = 1280;
         this.canvas.height = 720;
+
+        // Global ESC Listener
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Escape' && this.running) {
+                UIManager.showMenu();
+            }
+        });
     },
 
     resize() {
